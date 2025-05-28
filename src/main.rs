@@ -11,8 +11,42 @@ async fn sse_handler() -> HttpResponse {
                .insert_header(("Cache-Control", "no-cache"))
                .insert_header(("Connection", "keep-alive"));
 
+    let initial_data_lines = vec![
+        "data: YHOO",
+        "data: +2",
+        "data: 10",
+        "",
+        ": test stream",
+        "",
+        "data: first event",
+        "id: 1",
+        "",
+        "data:second event",
+        "id",
+        "",
+        "data:  third event",
+        "",
+        "data",
+        "",
+        "data",
+        "data",
+        "",
+        "data:",
+        "",
+        "data:test",
+        "",
+        "data: test",
+    ];
+
+    let initial_event_string = initial_data_lines.into_iter()
+        .map(|line| format!("{}\n", line))
+        .collect::<String>()
+        + "\n";
+    let initial_stream = stream::once(async move {
+        Ok::<_, actix_web::Error>(web::Bytes::from(initial_event_string))
+    });
     let start_time = Instant::now();
-    let event_stream = stream::repeat(())
+    let dynamic_event_stream = stream::repeat(())
         .enumerate()
         .take(15)
         .map(move |(i, _)| {
@@ -39,8 +73,9 @@ async fn sse_handler() -> HttpResponse {
             }
         })
         .flat_map(|fut| stream::once(fut));
+    let combined_event_stream = initial_stream.chain(dynamic_event_stream);
 
-    res_builder.body(BodyStream::new(event_stream))
+    res_builder.body(BodyStream::new(combined_event_stream))
                .into()
 }
 
